@@ -31,23 +31,24 @@ jobs:
             python3-venv cmake ninja-build ccache libffi-dev libssl-dev \
             dfu-util libusb-1.0-0
 
-      - name: Install ESP-IDF v5.5.3
+      # 降级到 ESP-IDF v5.3.2 (LTS, 已知稳定, 不带 v5.5 那个 SHA-256 计算 bug)
+      - name: Install ESP-IDF v5.3.2
         run: |
-          if [ ! -d "$HOME/esp/esp-idf-v5.5.3" ]; then
+          if [ ! -d "$HOME/esp/esp-idf" ]; then
             mkdir -p "$HOME/esp"
             cd "$HOME/esp"
-            git clone --recursive --branch v5.5.3 \
-              https://github.com/espressif/esp-idf.git esp-idf-v5.5.3
-            cd esp-idf-v5.5.3
+            git clone --recursive --branch v5.3.2 \
+              https://github.com/espressif/esp-idf.git esp-idf
+            cd esp-idf
             ./install.sh esp32c3
           else
             echo "ESP-IDF already installed, skipping"
           fi
-          echo "ESP_IDF_PATH=$HOME/esp/esp-idf-v5.5.3" >> "$GITHUB_ENV"
+          echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> "$GITHUB_ENV"
 
       - name: Build firmware
         run: |
-          source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null 2>&1 || {
+          source "$HOME/esp/esp-idf/export.sh" > /dev/null 2>&1 || {
             echo "ERROR: failed to source export.sh"
             exit 1
           }
@@ -66,27 +67,6 @@ jobs:
         with:
           name: build-log
           path: build.log
-
-      # 关键修复: ESP-IDF 5.5.x 在某些条件下生成的 .bin 头里 SHA-256 字段不对.
-      # 用 espsecure resign_image 强制重算 SHA-256.
-      # 不开 secure boot, 这里只做"重写 image 头" (resign without keys).
-      - name: Resign image with correct SHA-256
-        if: success()
-        run: |
-          source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null 2>&1
-          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
-          if [ -z "$BIN" ]; then
-            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
-          fi
-          echo "Original: $BIN"
-          cp "$BIN" "$BIN.unsigned"
-
-          # 用 espsecure resign_image: 不需要 secure boot key,
-          # 它会重新计算 image 内容的 SHA-256 并写回头部.
-          python "$IDF_PATH/components/esptool_py/esptool/espsecure.py" \
-            resign_image "$BIN"
-          echo "=== SHA after resign ==="
-          sha256sum "$BIN"
 
       - name: Locate and rename artifact
         if: success()
