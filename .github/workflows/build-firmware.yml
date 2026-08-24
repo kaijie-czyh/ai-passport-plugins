@@ -45,21 +45,6 @@ jobs:
           fi
           echo "ESP_IDF_PATH=$HOME/esp/esp-idf-v5.5.3" >> "$GITHUB_ENV"
 
-      # 关键修复: 关掉 HEADER_FLASHSIZE_UPDATE, 避免 esptool 写完 header 后
-      # flash size 被改但 SHA-256 未重算导致启动校验失败.
-      # 用一个 overlay sdkconfig 文件覆盖默认.
-      - name: Override sdkconfig defaults
-        run: |
-          cat > sdkconfig.ci <<'EOF'
-          # 不要在烧录时改 flash header — 这会让 SHA-256 校验元数据失效
-          CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE=n
-          # 显式锁定 8MB
-          CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-          # 不要 flash 加密
-          CONFIG_SECURE_BOOT=n
-          CONFIG_SECURE_FLASH_ENC_ENABLED=n
-          EOF
-
       - name: Build firmware
         run: |
           source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null 2>&1 || {
@@ -68,10 +53,9 @@ jobs:
           }
           echo "idf.py: $(which idf.py)"
           idf.py --version
-          # 用 overlay sdkconfig 覆盖默认
-          idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci" set-target esp32c3
-          idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci" reconfigure
-          idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci" build 2>&1 | tee build.log
+          idf.py set-target esp32c3
+          idf.py reconfigure
+          idf.py build 2>&1 | tee build.log
           echo "=== build artifacts ==="
           find build -maxdepth 2 -name "*.bin" 2>&1
           ls -lh build/ | head -20
@@ -83,10 +67,34 @@ jobs:
           name: build-log
           path: build.log
 
+      # 关键修复: ESP-IDF 5.5.x 在某些条件下生成的 .bin 头里 SHA-256 字段不对.
+      # 用 espsecure resign_image 强制重算 SHA-256.
+      # 不开 secure boot, 这里只做"重写 image 头" (resign without keys).
+      - name: Resign image with correct SHA-256
+        if: success()
+        run: |
+          source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null 2>&1
+          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          fi
+          echo "Original: $BIN"
+          cp "$BIN" "$BIN.unsigned"
+
+          # 用 espsecure resign_image: 不需要 secure boot key,
+          # 它会重新计算 image 内容的 SHA-256 并写回头部.
+          python "$IDF_PATH/components/esptool_py/esptool/espsecure.py" \
+            resign_image "$BIN"
+          echo "=== SHA after resign ==="
+          sha256sum "$BIN"
+
       - name: Locate and rename artifact
         if: success()
         run: |
-          BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          fi
           if [ -z "$BIN" ]; then
             echo "ERROR: no .bin found in build/"
             exit 1
