@@ -120,7 +120,6 @@ static lv_obj_t *s_lab_rec;
 static lv_obj_t *s_lab_hint;
 static lv_obj_t *s_lab_sep1;
 static lv_obj_t *s_lab_sep2;
-static lv_obj_t *s_lab_sep3;
 
 // ---------- NVS 持久化 ----------
 static void nvs_load(void) {
@@ -234,29 +233,6 @@ static void refresh_progress(void) {
     char buf[24];
     snprintf(buf, sizeof(buf), "%d / %d", s_idx + 1, s_task_n);
     lv_label_set_text(s_lab_progress, buf);
-}
-
-static void refresh_rec(void) {
-    if (!s_rect_rec || !s_lab_rec) return;
-    const char *txt = "READY";
-    uint32_t col = 0x2EA043;
-    if (s_rec_state == REC_RECORDING) {
-        txt = "REC";
-        col = 0xE03131;
-        int64_t dur_ms = (esp_timer_get_time() - s_rec_start_us) / 1000;
-        char t[16];
-        snprintf(t, sizeof(t), "%ld.%02lds", (long)(dur_ms / 1000), (long)((dur_ms % 1000) / 10));
-        lv_label_set_text(s_lab_rec, t);
-    } else if (s_rec_state == REC_SENDING) {
-        txt = "SEND";
-        col = 0x3B8BFF;
-    } else {
-        lv_label_set_text(s_lab_rec, "");
-    }
-    lv_obj_set_style_bg_color(s_rect_rec, lv_color_hex(col), 0);
-    lv_label_set_text(s_rect_rec, txt); // 复用 rect_rec 的 label? 不,我们要单独 lab_rec 显示时间
-    // 注意:这里 s_rect_rec 本身不是 label,需要单独放一个 label
-    // 为简化,直接把 txt 显示在 s_rect_rec 内嵌的 label 上
 }
 
 static lv_obj_t *s_lab_rec_badge;  // 录音徽章上的文字

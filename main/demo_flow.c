@@ -136,12 +136,7 @@ static void format_clock(char *out, size_t n) {
     snprintf(out, n, "%02d:%02d", hh, mm);
 }
 
-static uint32_t today_unix_day(void) {
-    // 粗略估算,不依赖 SNTP:从启动时间计算
-    // 真实产品应接 Wi-Fi + SNTP,这里用 NVS 中上次保存的日期 + uptime 增量
-    // 简化:返回 0 表示无意义;streak 仅在断电重启后基于 NVS last_day 维持
-    return 0;
-}
+// today_unix_day() 暂未实现 (需 SNTP 才能精确) — streak 仅基于 NVS 上次保存值
 
 // ---------- NVS ----------
 static void nvs_load(void) {
@@ -230,8 +225,6 @@ static void nvs_save_stats(void) {
 // ---------- 蜂鸣 ----------
 // BSP 没暴露独立 tone API 时,用一段 1 kHz 方波短音
 // 这里调 bsp_audio_play,需要一段 buffer;为节省内存,用同一段 200 样本 1kHz 方波。
-static const int16_t s_beep[200] __attribute__((aligned(4))); // forward decl, define later
-// 由于没有静态生成器,我们在首次调用时填充
 static int16_t *s_beep_buf = NULL;
 static size_t   s_beep_len = 0;
 
@@ -284,8 +277,8 @@ static void flow_tick_task(void *arg) {
                 nvs_save_stats();
                 nvs_save_state();
                 beep_done();
-                printf("{\"t\":\"event\",\"kind\":\"focus_done\",\"dur_s\":%d}\n",
-                       s_f.total_s);
+                printf("{\"t\":\"event\",\"kind\":\"focus_done\",\"dur_s\":%ld}\n",
+                       (long)s_f.total_s);
             } else if (s_f.state == ST_BREAK) {
                 s_f.state = ST_IDLE;
                 s_f.remain_s = 0;
@@ -328,7 +321,8 @@ static void refresh_remain(void) {
     int pct = 0;
     if (s_f.total_s > 0) {
         pct = (int)((s_f.total_s - s_f.remain_s) * 100 / s_f.total_s);
-        if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+        if (pct < 0) pct = 0;
+        if (pct > 100) pct = 100;
     }
     lv_bar_set_value(s_bar_prog, pct, LV_ANIM_OFF);
 }
@@ -366,10 +360,10 @@ static void refresh_state(void) {
     case ST_BREAK:   stxt = "BREAK";   scol = 0x3B8BFF; break;
     }
     char buf[40];
-    snprintf(buf, sizeof(buf), "%s %dmin   STATE: %s",
+    snprintf(buf, sizeof(buf), "%s %ldmin   STATE: %s",
              (s_f.state == ST_BREAK) ? "BREAK" : "POMODORO",
-             (s_f.state == ST_BREAK) ? (s_f.break_default_s / 60)
-                                     : (s_f.focus_default_s / 60),
+             (long)((s_f.state == ST_BREAK) ? (s_f.break_default_s / 60)
+                                            : (s_f.focus_default_s / 60)),
              stxt);
     lv_label_set_text(s_lab_state, buf);
     lv_obj_set_style_text_color(s_lab_state, lv_color_hex(scol), 0);
@@ -431,7 +425,7 @@ void demo_flow_enter(void) {
     // 倒计时大字
     s_lab_remain = lv_label_create(s_scr);
     lv_obj_set_style_text_color(s_lab_remain, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(s_lab_remain, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_font(s_lab_remain, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_align(s_lab_remain, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_pos(s_lab_remain, 0, 76);
     lv_obj_set_width(s_lab_remain, 240);
@@ -480,8 +474,6 @@ void demo_flow_enter(void) {
     lv_timer_create(flow_tick_cb, 500, NULL);
 
     // 启动后台倒计时 task (已经在 main 启动后, 只在 RUNNING/BREAK 时 tick)
-    static StaticTask_t s_task_buf;
-    static StackType_t  s_stack[4096];
     if (s_f.state == ST_PAUSED && s_f.remain_s > 0) {
         // 恢复上次 session, 但保持 PAUSED
     }
@@ -490,11 +482,11 @@ void demo_flow_enter(void) {
     lv_screen_load(s_scr);
 
     printf("{\"t\":\"hello\",\"app\":\"flow\",\"ver\":1}\n");
-    printf("{\"t\":\"tick\",\"state\":\"%s\",\"remain\":%d,\"total\":%d}\n",
+    printf("{\"t\":\"tick\",\"state\":\"%s\",\"remain\":%ld,\"total\":%ld}\n",
            s_f.state == ST_IDLE ? "idle" :
            s_f.state == ST_RUNNING ? "running" :
            s_f.state == ST_PAUSED ? "paused" : "break",
-           s_f.remain_s, s_f.total_s);
+           (long)s_f.remain_s, (long)s_f.total_s);
 
     // 启动常驻倒计时 task (一次性)
     extern void flow_task_launch(void);
@@ -550,8 +542,8 @@ void demo_flow_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
             refresh_state();
             nvs_save_state();
             beep_once();
-            printf("{\"t\":\"event\",\"kind\":\"focus_start\",\"dur_s\":%d}\n",
-                   s_f.total_s);
+            printf("{\"t\":\"event\",\"kind\":\"focus_start\",\"dur_s\":%ld}\n",
+                   (long)s_f.total_s);
             break;
         case ST_RUNNING:
             s_f.state = ST_PAUSED;
@@ -608,13 +600,14 @@ static int cmd_flow(int argc, char **argv) {
         if (bsp_lvgl_lock(200)) { refresh_task(); bsp_lvgl_unlock(); }
     } else if (strcmp(argv[1], "start") == 0) {
         int mins = (argc >= 3) ? atoi(argv[2]) : 25;
-        if (mins < 1) mins = 1; if (mins > 180) mins = 180;
+        if (mins < 1) mins = 1;
+        if (mins > 180) mins = 180;
         s_f.state = ST_RUNNING;
         s_f.total_s  = mins * 60;
         s_f.remain_s = mins * 60;
         nvs_save_state();
         if (bsp_lvgl_lock(200)) { refresh_state(); refresh_remain(); bsp_lvgl_unlock(); }
-        printf("{\"t\":\"event\",\"kind\":\"focus_start\",\"dur_s\":%d}\n", s_f.total_s);
+        printf("{\"t\":\"event\",\"kind\":\"focus_start\",\"dur_s\":%ld}\n", (long)s_f.total_s);
     } else if (strcmp(argv[1], "pause") == 0) {
         if (s_f.state == ST_RUNNING) {
             s_f.state = ST_PAUSED;
