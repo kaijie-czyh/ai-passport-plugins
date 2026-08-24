@@ -31,22 +31,29 @@ jobs:
             python3-venv cmake ninja-build ccache libffi-dev libssl-dev \
             dfu-util libusb-1.0-0
 
-      - name: Setup ESP-IDF v5.5.3
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.5.3
-          target: esp32c3
-
-      # 注意: 不设置 working-directory! esp-idf-ci-action 在默认目录下激活环境,
-      # 一旦 override working-dir 就会丢失 PATH/IDF_PATH.
-
-      - name: Verify idf.py is available
+      # 把 ESP-IDF 克隆到固定路径,然后在 build step 里 source export.sh.
+      # 不用 esp-idf-ci-action (它在 step 之间不会持久化 PATH).
+      - name: Install ESP-IDF v5.5.3
         run: |
-          which idf.py
+          if [ ! -d "$HOME/esp/esp-idf-v5.5.3" ]; then
+            mkdir -p "$HOME/esp"
+            cd "$HOME/esp"
+            git clone --recursive --branch v5.5.3 --depth 1 \
+              https://github.com/espressif/esp-idf.git esp-idf-v5.5.3
+            cd esp-idf-v5.5.3
+            ./install.sh esp32c3
+          else
+            echo "ESP-IDF already installed, skipping"
+          fi
+          echo "ESP_IDF_PATH=$HOME/esp/esp-idf-v5.5.3" >> "$GITHUB_ENV"
+
+      # 所有需要 idf.py 的命令集中在这里,前面 source export.sh
+      - name: Build firmware
+        run: |
+          set -e
+          source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null
+          echo "idf.py: $(which idf.py)"
           idf.py --version
-
-      - name: Build
-        run: |
           idf.py set-target esp32c3
           idf.py reconfigure
           idf.py build
@@ -54,7 +61,6 @@ jobs:
       - name: Show build size
         run: |
           ls -lh build/ai-passport.bin
-          # 期望 700KB - 1.2MB
 
       - name: Rename artifact
         run: |
