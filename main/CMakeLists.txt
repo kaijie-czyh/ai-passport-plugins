@@ -1,6 +1,6 @@
-# CMakeLists.txt —— 拷贝覆盖 ai-passport/main/CMakeLists.txt
+# CMakeLists.txt —— 替换 ai-passport/main/CMakeLists.txt
 #
-# 新增 3 个 demo 源文件.
+# 新增 3 个 demo 源文件 + 声明额外组件依赖.
 
 idf_component_register(
     SRCS "main.c"
@@ -15,4 +15,7 @@ idf_component_register(
           "demo_flow.c"
     INCLUDE_DIRS "."
     REQUIRES bsp
+             console
+             nvs_flash
+             esp_timer
 )
