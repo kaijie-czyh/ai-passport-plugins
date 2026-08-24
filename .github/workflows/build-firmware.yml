@@ -36,7 +36,6 @@ jobs:
           if [ ! -d "$HOME/esp/esp-idf-v5.5.3" ]; then
             mkdir -p "$HOME/esp"
             cd "$HOME/esp"
-            # 用完整 clone (不带 --depth),因为 ESP-IDF 依赖很多 git submodule
             git clone --recursive --branch v5.5.3 \
               https://github.com/espressif/esp-idf.git esp-idf-v5.5.3
             cd esp-idf-v5.5.3
@@ -46,37 +45,20 @@ jobs:
           fi
           echo "ESP_IDF_PATH=$HOME/esp/esp-idf-v5.5.3" >> "$GITHUB_ENV"
 
-      # 把所有需要 ESP-IDF 环境的命令集中在一个 step 内,
-      # source 一次后整个 step 内的命令都能用 idf.py.
-      # 不使用 set -e,这样即使 build 失败我们也能看到完整日志.
       - name: Build firmware
         run: |
           source "$HOME/esp/esp-idf-v5.5.3/export.sh" > /dev/null 2>&1 || {
             echo "ERROR: failed to source export.sh"
-            cat "$HOME/esp/esp-idf-v5.5.3/export.sh" | head -50
             exit 1
           }
           echo "idf.py: $(which idf.py)"
           idf.py --version
-          echo "=== set-target ==="
-          idf.py set-target esp32c3 || true
-          echo "=== reconfigure ==="
-          idf.py reconfigure || true
-          echo "=== build ==="
+          idf.py set-target esp32c3
+          idf.py reconfigure
           idf.py build 2>&1 | tee build.log
-          echo "=== build done ==="
-          echo "build dir contents:"
-          ls -la build/ 2>&1 | head -30
-          echo "Looking for bin:"
-          find build -name "*.bin" 2>&1 | head
-
-      - name: Show build size
-        if: always()
-        run: |
-          echo "=== build dir ==="
-          ls -la build/ 2>&1 | head -30 || echo "no build dir"
-          echo "=== find .bin ==="
-          find build -name "*.bin" 2>&1 | head || echo "no bin found"
+          echo "=== build artifacts ==="
+          find build -maxdepth 2 -name "*.bin" 2>&1
+          ls -lh build/ | head -20
 
       - name: Upload build log on failure
         if: failure()
@@ -85,12 +67,25 @@ jobs:
           name: build-log
           path: build.log
 
-      - name: Rename artifact
+      # ESP-IDF 产物文件名由 project() 决定 — 原仓库是 "FoloToy-AI-Passport".
+      # 我们的 fork 仓库名是 ai-passport-plugins, 但 CMakeLists 里 project() 还是
+      # FoloToy-AI-Passport, 所以产物是 build/FoloToy-AI-Passport.bin.
+      - name: Locate and rename artifact
         if: success()
         run: |
-          cp build/ai-passport.bin ai-passport-diy.bin
+          echo "=== build dir ==="
+          ls -la build/
+          echo "=== find .bin ==="
+          BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          if [ -z "$BIN" ]; then
+            echo "ERROR: no .bin found in build/"
+            exit 1
+          fi
+          echo "Found binary: $BIN"
+          cp "$BIN" ai-passport-diy.bin
           sha256sum ai-passport-diy.bin > ai-passport-diy.bin.sha256
           ls -lh ai-passport-diy.bin
+          cat ai-passport-diy.bin.sha256
 
       - name: Create Release
         if: success()
@@ -103,7 +98,7 @@ jobs:
           body: |
             ## DIY Firmware Build
 
-            This release is automatically built from the `main` branch of your fork.
+            Built from `main` of your fork with the 3 plugin demos.
 
             ### How to flash
 
@@ -112,14 +107,7 @@ jobs:
             3. Click "刷机" (Flash) → connect USB → choose file → write at `0x0`
             4. Power-cycle Passport, you'll see the new 7-item menu including `Quick`
 
-            ### Files
-
-            - `ai-passport-diy.bin` — merge image, write at 0x0
-            - `ai-passport-diy.bin.sha256` — checksum for verification
-
-            ### Verify build commit
-
-            `${{ github.sha }}` on `${{ github.ref_name }}`
+            Commit: `${{ github.sha }}`
           files: |
             ai-passport-diy.bin
             ai-passport-diy.bin.sha256
