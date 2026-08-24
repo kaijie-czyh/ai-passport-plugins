@@ -37,24 +37,28 @@ jobs:
           esp_idf_version: v5.5.3
           target: esp32c3
 
+      # 注意: 不设置 working-directory! esp-idf-ci-action 在默认目录下激活环境,
+      # 一旦 override working-dir 就会丢失 PATH/IDF_PATH.
+
+      - name: Verify idf.py is available
+        run: |
+          which idf.py
+          idf.py --version
+
       - name: Build
-        working-directory: ${{ github.workspace }}
         run: |
           idf.py set-target esp32c3
           idf.py reconfigure
           idf.py build
 
       - name: Show build size
-        working-directory: ${{ github.workspace }}
         run: |
           ls -lh build/ai-passport.bin
           # 期望 700KB - 1.2MB
 
       - name: Rename artifact
-        working-directory: ${{ github.workspace }}
         run: |
           cp build/ai-passport.bin ai-passport-diy.bin
-          # 计算 sha256, 写到 manifest
           sha256sum ai-passport-diy.bin > ai-passport-diy.bin.sha256
 
       - name: Create Release
