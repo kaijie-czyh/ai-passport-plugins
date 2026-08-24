@@ -69,7 +69,6 @@
 #include "nvs.h"
 
 #include "bsp_display.h"
-#include "bsp_lvgl.h"
 #include "bsp_button.h"
 #include "bsp_audio.h"
 #include "bsp_battery.h"
@@ -251,7 +250,8 @@ static void beep_init(void) {
 static void beep_once(void) {
     if (!s_beep_buf) beep_init();
     if (!s_beep_buf) return;
-    bsp_audio_write(s_beep_buf, s_beep_len * sizeof(int16_t), portMAX_DELAY);
+    // BSP 签名: esp_err_t bsp_audio_write(const void *pcm, size_t bytes)
+    (void)bsp_audio_write(s_beep_buf, s_beep_len * sizeof(int16_t));
 }
 
 static void beep_done(void) {
@@ -304,7 +304,7 @@ static void refresh_top(void) {
     char t[8];
     format_clock(t, sizeof(t));
     if (s_lab_time) lv_label_set_text(s_lab_time, t);
-    int soc = bsp_battery_get_soc();
+    int soc = bsp_battery_soc();
     if (soc < 0) soc = 0;
     if (soc > 100) soc = 100;
     if (s_bar_bat) lv_bar_set_value(s_bar_bat, soc, LV_ANIM_OFF);

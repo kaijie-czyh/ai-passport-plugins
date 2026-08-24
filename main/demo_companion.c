@@ -68,8 +68,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include "bsp_display.h"
-#include "bsp_lvgl.h"   // bsp_lvgl_lock / unlock
+#include "bsp_display.h"   // bsp_lvgl_lock / unlock 也在这里声明
 #include "bsp_button.h"
 #include "bsp_battery.h"
 #include "bsp_pins.h"
@@ -77,7 +76,6 @@
 #include "esp_log.h"
 #include "esp_console.h"
 #include "esp_timer.h"
-#include "argtable3/argtable3.h"
 
 static const char *TAG = "companion";
 
@@ -208,7 +206,7 @@ static void refresh_top_bar(void) {
         format_time(t, sizeof(t));
         lv_label_set_text(s_lab_time, t);
     }
-    int soc = bsp_battery_get_soc();
+    int soc = bsp_battery_soc();
     if (soc < 0) soc = 0;
     if (soc > 100) soc = 100;
     if (s_bar_bat) lv_bar_set_value(s_bar_bat, soc, LV_ANIM_OFF);
@@ -255,7 +253,7 @@ static void emit_state_json(void) {
            s_state.elapsed_s, s_state.total_s,
            (unsigned)s_state.turn, (unsigned)s_state.tok,
            (unsigned)s_state.task_idx, (unsigned)s_state.task_n,
-           bsp_battery_get_soc());
+           bsp_battery_soc());
 }
 
 // ---------- demo 模板: enter / exit / key ----------

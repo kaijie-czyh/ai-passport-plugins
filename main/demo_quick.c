@@ -76,7 +76,6 @@
 #include "nvs.h"
 
 #include "bsp_display.h"
-#include "bsp_lvgl.h"
 #include "bsp_button.h"
 #include "bsp_audio.h"
 #include "bsp_battery.h"
@@ -84,7 +83,6 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_console.h"
-#include "argtable3/argtable3.h"
 
 static const char *TAG = "quick";
 
@@ -189,7 +187,7 @@ static void refresh_top(void) {
     char t[8];
     format_time(t, sizeof(t));
     if (s_lab_time) lv_label_set_text(s_lab_time, t);
-    int soc = bsp_battery_get_soc();
+    int soc = bsp_battery_soc();
     if (soc < 0) soc = 0;
     if (soc > 100) soc = 100;
     if (s_bar_bat) lv_bar_set_value(s_bar_bat, soc, LV_ANIM_OFF);
@@ -338,9 +336,10 @@ static void record_task(void *arg) {
     // 这里我们使用一个常见形式:按 1 秒一块读,读 REC_DURATION_MS 毫秒。
     // 为简化,使用一次 read: 单次最多 REC_BYTES 字节 (samples).
     // 若 BSP 实际 API 不同,需要替换为分块循环。
-    int n = bsp_audio_read(buf, REC_BYTES, portMAX_DELAY);
+    // BSP 签名: esp_err_t bsp_audio_read(void *pcm, size_t bytes) — 阻塞调用, 无 timeout 参数
+    esp_err_t aerr = bsp_audio_read(buf, REC_BYTES);
     int64_t dur_us = esp_timer_get_time() - start;
-    got_samples = (n > 0) ? (uint32_t)(n / 2) : 0;
+    got_samples = (aerr == ESP_OK) ? (uint32_t)(REC_BYTES / 2) : 0;
     uint32_t dur_ms = (uint32_t)(dur_us / 1000);
 
     printf("{\"t\":\"rec\",\"state\":\"stop\",\"dur_ms\":%" PRIu32 ",\"samples\":%" PRIu32 "}\n",
