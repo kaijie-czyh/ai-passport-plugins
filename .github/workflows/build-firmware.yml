@@ -81,6 +81,20 @@ jobs:
           ls -lh ai-passport-diy.bin
           cat ai-passport-diy.bin.sha256
 
+      # 关键诊断: 用 esptool image-info 看 .bin metadata, 确认 SHA-256 是否在 header 里正确写入
+      - name: Inspect .bin metadata
+        if: success()
+        run: |
+          source "$HOME/esp/esp-idf/export.sh" > /dev/null 2>&1
+          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          fi
+          echo "=== esptool image-info $BIN ==="
+          python "$IDF_PATH/components/esptool_py/esptool/__init__.py" image-info "$BIN" 2>&1 || \
+          python -m esptool image-info "$BIN" 2>&1 || \
+          echo "(esptool image-info failed)"
+
       - name: Create Release
         if: success()
         uses: softprops/action-gh-release@v2
