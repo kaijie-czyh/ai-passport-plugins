@@ -64,35 +64,45 @@ jobs:
           name: build-log
           path: build.log
 
-      - name: Locate and rename artifact
-        if: success()
-        run: |
-          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
-          if [ -z "$BIN" ]; then
-            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
-          fi
-          if [ -z "$BIN" ]; then
-            echo "ERROR: no .bin found in build/"
-            exit 1
-          fi
-          echo "Found binary: $BIN"
-          cp "$BIN" ai-passport-diy.bin
-          sha256sum ai-passport-diy.bin > ai-passport-diy.bin.sha256
-          ls -lh ai-passport-diy.bin
-          cat ai-passport-diy.bin.sha256
-
-      # 关键诊断: 用 esptool image-info 看 .bin metadata, 确认 SHA-256 是否在 header 里正确写入
-      - name: Inspect .bin metadata
+      - name: Locate and merge factory image
         if: success()
         run: |
           source "$HOME/esp/esp-idf/export.sh" > /dev/null 2>&1
-          BIN=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
-          if [ -z "$BIN" ]; then
-            BIN=$(find build -maxdepth 2 -name "*.bin" | head -1)
+          APP=$(find build -maxdepth 2 -name "FoloToy-AI-Passport.bin" | head -1)
+          BOOT=build/bootloader/bootloader.bin
+          PTBL=build/partition_table/partition-table.bin
+          if [ -z "$APP" ] || [ ! -f "$BOOT" ] || [ ! -f "$PTBL" ]; then
+            echo "ERROR: missing artifacts (APP=$APP BOOT=$BOOT PTBL=$PTBL)"
+            exit 1
           fi
-          echo "=== esptool image-info $BIN ==="
-          python "$IDF_PATH/components/esptool_py/esptool/__init__.py" image-info "$BIN" 2>&1 || \
-          python -m esptool image-info "$BIN" 2>&1 || \
+          echo "Bootloader: $BOOT ($(stat -c%s "$BOOT") B)  Partition: $PTBL  App: $APP"
+          # 合并成可在 0x0 直刷的全量镜像:
+          #   0x00000 bootloader + 0x08000 partition table + 0x10000 app
+          # (若不合并, 单独刷 app.bin 到 0x0 会导致 bootloader SHA 校验失败 → boot loop)
+          python "$IDF_PATH/components/esptool_py/esptool/__init__.py" --chip esp32c3 \
+            merge_bin -o ai-passport-diy.bin \
+            --flash_mode dio --flash_size 8MB --flash_freq 80m \
+            0x0     "$BOOT" \
+            0x8000  "$PTBL" \
+            0x10000 "$APP" || \
+          python -m esptool --chip esp32c3 \
+            merge_bin -o ai-passport-diy.bin \
+            --flash_mode dio --flash_size 8MB --flash_freq 80m \
+            0x0     "$BOOT" \
+            0x8000  "$PTBL" \
+            0x10000 "$APP"
+          ls -lh ai-passport-diy.bin
+          sha256sum ai-passport-diy.bin > ai-passport-diy.bin.sha256
+          cat ai-passport-diy.bin.sha256
+
+      # 诊断: 确认合并镜像的前 4 字节确实是 bootloader 头(0xE9), 而非 app.
+      - name: Verify merged image
+        if: success()
+        run: |
+          HD=$(od -An -t x1 -N4 ai-passport-diy.bin | tr -d ' ')
+          echo "Bootloader header bytes: $HD (expect e9xxxxxx)"
+          python "$IDF_PATH/components/esptool_py/esptool/__init__.py" image-info ai-passport-diy.bin 2>&1 || \
+          python -m esptool image-info ai-passport-diy.bin 2>&1 || \
           echo "(esptool image-info failed)"
 
       - name: Create Release

@@ -33,10 +33,13 @@ static void on_event(void *arg, void *usr_data, bsp_btn_ev_t ev) {
     if (!s_cb) return;
     s_cb((bsp_btn_t)(intptr_t)usr_data, ev, s_user);
 }
-static void cb_press (void *a, void *u) { on_event(a, u, BSP_BTN_PRESS);  }
-static void cb_click (void *a, void *u) { on_event(a, u, BSP_BTN_CLICK);  }
-static void cb_double(void *a, void *u) { on_event(a, u, BSP_BTN_DOUBLE); }
-static void cb_long  (void *a, void *u) { on_event(a, u, BSP_BTN_LONG);   }
+// 只保留一次物理按键对应的【一次】回调:
+//   - BUTTON_SINGLE_CLICK → 单击(菜单上下移动/进入, demo 内触发动作)
+//   - BUTTON_LONG_PRESS_START → 长按(demo 内返回菜单)
+// 注意: 切勿再注册 BUTTON_PRESS_DOWN —— 否则一次按压会同时触发 PRESS+CLICK 两次,
+//       让菜单单次 UP/DOWN 跨越两行。iot_button 对长按仍会先触发 LONG,不依赖 PRESS。
+static void cb_click(void *a, void *u) { on_event(a, u, BSP_BTN_CLICK); }
+static void cb_long (void *a, void *u) { on_event(a, u, BSP_BTN_LONG);  }
 
 esp_err_t bsp_button_init(bsp_btn_cb_t cb, void *user) {
     s_cb = cb; s_user = user;
@@ -68,9 +71,7 @@ esp_err_t bsp_button_init(bsp_btn_cb_t cb, void *user) {
             return e == ESP_OK ? ESP_FAIL : e;
         }
         void *idx = (void *)(intptr_t)i;
-        iot_button_register_cb(s_btn[i], BUTTON_PRESS_DOWN,      NULL, cb_press,  idx);
-        iot_button_register_cb(s_btn[i], BUTTON_SINGLE_CLICK,    NULL, cb_click,  idx);
-        iot_button_register_cb(s_btn[i], BUTTON_DOUBLE_CLICK,    NULL, cb_double, idx);
+        iot_button_register_cb(s_btn[i], BUTTON_SINGLE_CLICK,    NULL, cb_click, idx);
         iot_button_register_cb(s_btn[i], BUTTON_LONG_PRESS_START,NULL, cb_long,   idx);
     }
 

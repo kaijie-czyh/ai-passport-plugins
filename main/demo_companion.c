@@ -65,6 +65,27 @@ static char     s_tasks[MAX_TASKS][MAX_TASK_LEN];
 
 static int64_t s_state_start_us = 0;  // 进入当前 state 的时间
 
+// 把 "hx:<hex>" 后缀的 16 进制串(仅 ASCII, 两两一字节)解码为 UTF-8 写入 out。
+// 用途: ESP console REPL 会丢弃部分非 ASCII 输入, 中文任务名先由电脑端 hex 编码
+//       成纯 ASCII 传输, 固件端再解码还原, 从而能在屏幕上正常显示中文。
+static void companion_hex_decode(const char *hex, char *out, size_t n) {
+    size_t i = 0, o = 0;
+    if (n == 0) return;
+    if (!hex) { out[0] = 0; return; }
+    while (hex[i] && hex[i + 1] && o + 1 < n) {
+        char a = hex[i], b = hex[i + 1];
+        a = (a >= '0' && a <= '9') ? (char)(a - '0')
+            : (a >= 'A' && a <= 'F') ? (char)(a - 'A' + 10)
+            : (char)(a - 'a' + 10);
+        b = (b >= '0' && b <= '9') ? (char)(b - '0')
+            : (b >= 'A' && b <= 'F') ? (char)(b - 'A' + 10)
+            : (char)(b - 'a' + 10);
+        out[o++] = (char)((a << 4) | b);
+        i += 2;
+    }
+    out[o] = 0;
+}
+
 // ---------- UI ----------
 static lv_obj_t *s_scr = NULL;
 static lv_obj_t *s_lab_time = NULL;
@@ -245,7 +266,7 @@ void demo_companion_enter(void) {
 
     s_lab_task = lv_label_create(s_scr);
     lv_obj_set_style_text_color(s_lab_task, lv_color_hex(0xE6E6E6), 0);
-    lv_obj_set_style_text_font(s_lab_task, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(s_lab_task, &lv_font_source_han_sans_sc_16_cjk, 0);
     lv_obj_set_pos(s_lab_task, 56, 110);
     lv_obj_set_width(s_lab_task, 180);
 
@@ -339,11 +360,19 @@ static int cmd_companion(int argc, char **argv) {
         s_state = ns;
         s_state_start_us = esp_timer_get_time();
         if (argc >= 4) {
-            strncpy(s_task, argv[3], MAX_TASK_LEN - 1);
+            // 任务名可以是普通 UTF-8, 也能是 "hx:<hex>"(中文经 hex 编码传输, 绕过 console 非 ASCII 限制)
+            char decoded[MAX_TASK_LEN];
+            if (strncmp(argv[3], "hx:", 3) == 0) {
+                companion_hex_decode(argv[3] + 3, decoded, sizeof(decoded));
+            } else {
+                strncpy(decoded, argv[3], sizeof(decoded) - 1);
+                decoded[sizeof(decoded) - 1] = 0;
+            }
+            strncpy(s_task, decoded, MAX_TASK_LEN - 1);
             s_task[MAX_TASK_LEN - 1] = 0;
             // 同时加入任务列表
             if (s_task_n < MAX_TASKS) {
-                strncpy(s_tasks[s_task_n], argv[3], MAX_TASK_LEN - 1);
+                strncpy(s_tasks[s_task_n], decoded, MAX_TASK_LEN - 1);
                 s_tasks[s_task_n][MAX_TASK_LEN - 1] = 0;
                 s_task_idx = s_task_n;
                 s_task_n++;
