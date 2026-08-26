@@ -33,6 +33,9 @@
 #include "esp_timer.h"
 #include "esp_console.h"
 
+// 自带的 GB2312 大字库(含完整常用汉字), 由 tools/fontbuild/gen_font.py 生成
+LV_FONT_DECLARE(pas_cjk_16);
+
 static const char *TAG = "companion";
 
 #define MAX_TASK_LEN 64
@@ -266,7 +269,7 @@ void demo_companion_enter(void) {
 
     s_lab_task = lv_label_create(s_scr);
     lv_obj_set_style_text_color(s_lab_task, lv_color_hex(0xE6E6E6), 0);
-    lv_obj_set_style_text_font(s_lab_task, &lv_font_source_han_sans_sc_16_cjk, 0);
+    lv_obj_set_style_text_font(s_lab_task, &pas_cjk_16, 0);
     lv_obj_set_pos(s_lab_task, 56, 110);
     lv_obj_set_width(s_lab_task, 180);
 

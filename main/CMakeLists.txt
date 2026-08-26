@@ -13,6 +13,7 @@ idf_component_register(
           "demo_companion.c"
           "demo_quick.c"
           "demo_flow.c"
+          "fonts/pas_cjk_16.c"
     INCLUDE_DIRS "."
     REQUIRES bsp
              console

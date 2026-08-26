@@ -38,6 +38,9 @@
 #include "esp_timer.h"
 #include "esp_console.h"
 
+// GB2312 大字库(含常用汉字), 任务名可显示中文
+LV_FONT_DECLARE(pas_cjk_16);
+
 static const char *TAG = "flow";
 
 #define DEFAULT_FOCUS_S (25 * 60)
@@ -257,6 +260,16 @@ static void tick_cb(lv_timer_t *t) {
 void demo_flow_enter(void) {
     ESP_LOGI(TAG, "flow enter");
     nvs_load();
+    // 空任务时给默认项, 避免一进来就显示 "(no task)"
+    if (s_task_n == 0) {
+        static const char *dflt[] = { "专注当前任务", "深度阅读", "写作" };
+        for (int i = 0; i < (int)(sizeof(dflt) / sizeof(dflt[0])) && s_task_n < MAX_TASKS; i++) {
+            strncpy(s_tasks[s_task_n], dflt[i], TASK_NAME_LEN - 1);
+            s_tasks[s_task_n][TASK_NAME_LEN - 1] = 0;
+            s_task_n++;
+        }
+        s_task_idx = 0;
+    }
 
     s_scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(s_scr, lv_color_hex(0xF4F4EA), 0);
@@ -309,7 +322,7 @@ void demo_flow_enter(void) {
 
     s_lab_task = lv_label_create(s_scr);
     lv_obj_set_style_text_color(s_lab_task, lv_color_hex(0xE43B2F), 0);
-    lv_obj_set_style_text_font(s_lab_task, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(s_lab_task, &pas_cjk_16, 0);
     lv_obj_set_pos(s_lab_task, 56, 134);
     lv_obj_set_width(s_lab_task, 180);
 

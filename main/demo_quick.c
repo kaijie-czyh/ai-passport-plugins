@@ -49,6 +49,9 @@
 #include "esp_console.h"
 #include "esp_heap_caps.h"   // heap_caps_malloc / MALLOC_CAP_*
 
+// GB2312 大字库(含常用汉字), 任务名可显示中文
+LV_FONT_DECLARE(pas_cjk_16);
+
 static const char *TAG = "quick";
 
 #define MAX_TASKS     16
@@ -359,7 +362,7 @@ void demo_quick_enter(void) {
     for (int i = 0; i < 5; i++) {
         s_lab_tasks[i] = lv_label_create(s_scr);
         lv_obj_set_style_text_color(s_lab_tasks[i], lv_color_hex(0xE6E6E6), 0);
-        lv_obj_set_style_text_font(s_lab_tasks[i], &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(s_lab_tasks[i], &pas_cjk_16, 0);
         lv_obj_set_pos(s_lab_tasks[i], 8, 138 + i * 28);
         lv_obj_set_width(s_lab_tasks[i], 220);
     }
