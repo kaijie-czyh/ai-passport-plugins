@@ -1,0 +1,6 @@
+# Name,   Type, SubType, Offset,   Size,  Flags
+# AI Passport 8MB Flash, 单 app 无 OTA.
+# factory 扩到 7M 以容纳完整 GB2312 字库(约 1.5MB app); 余量供后续增长.
+nvs,      data, nvs,     0x9000,   0x6000,
+phy_init, data, phy,     0xf000,   0x1000,
+factory,  app,  factory, 0x10000,  7M,
