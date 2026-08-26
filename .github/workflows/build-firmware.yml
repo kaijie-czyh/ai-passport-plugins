@@ -104,12 +104,10 @@ jobs:
           draft: false
           prerelease: true
           body: |
-            ## DIY Firmware Build (diagnostic minimal version)
+            ## AI Passport 3-Plugin Firmware
 
-            Built from `main` of your fork. This release uses a MINIMAL main.c
-            that only displays "HELLO FROM DIY" on screen — no menu, no demos.
-
-            Purpose: verify the firmware actually boots on real hardware.
+            Built from `main` of your fork. Includes the 7-item menu:
+            Display / Button / Audio / Battery / **Companion** / **Quick** / **Flow**.
 
             ### How to flash
 
@@ -118,7 +116,7 @@ jobs:
             3. Click "刷机" (Flash) → connect USB → choose file → write at `0x0`
             4. Power-cycle Passport
 
-            Expected: screen shows "HELLO FROM DIY" text on dark background.
+            Expected: screen shows a 7-item menu after boot.
 
             Commit: `${{ github.sha }}`
           files: |
